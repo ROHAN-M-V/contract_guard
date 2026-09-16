@@ -52,3 +52,4 @@ test_contract_guard.db
 *.swo
 .DS_Store
 Thumbs.db
+INSTRUCTIONS.md

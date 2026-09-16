@@ -42,6 +42,7 @@ async def analyze_contract_endpoint(
             "document_type": d.document_type,
             "version_number": d.version_number,
             "storage_path": d.storage_path,
+            "mime_type": d.mime_type,
         }
         for d in docs
     ]

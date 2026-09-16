@@ -1,4 +1,7 @@
 import abc
+import importlib
+import sys
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 import httpx
 from app.core.config import settings
@@ -12,6 +15,16 @@ from app.schemas.analysis import (
 )
 from app.schemas.evidence import EvidenceItem
 from app.schemas.risk import RiskFactor
+from app.services.storage.storage_service import STORAGE_LOCAL_DIR
+
+
+def _run_document_ai(documents: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Run the local AI pipeline without requiring heavyweight imports at startup."""
+    backend_dir = str(Path(__file__).resolve().parents[3])
+    if backend_dir not in sys.path:
+        sys.path.append(backend_dir)
+    pipeline = importlib.import_module("AI-features.pipeline")
+    return pipeline.analyze_documents(documents, STORAGE_LOCAL_DIR)
 
 
 class AIAnalysisClient(abc.ABC):
@@ -239,6 +252,7 @@ class MockAIAnalysisClient(AIAnalysisClient):
         contract_metadata: Optional[Dict[str, Any]] = None,
     ) -> ContractAnalysisResult:
         meta = contract_metadata or {}
+        local_ai = _run_document_ai(documents)
         base_val = float(meta.get("baseline_value") or 50000000.0)
         curr_val = float(meta.get("current_value") or (base_val * 1.15))
         cost_diff = curr_val - base_val
@@ -248,7 +262,7 @@ class MockAIAnalysisClient(AIAnalysisClient):
         curr_version = max(num_docs, 1)
 
         # Risk score calculation heuristic for mock
-        score = min(95.0, max(15.0, round(cost_pct * 1.5 + num_docs * 5.0, 1)))
+        score = local_ai["risk_score"] if local_ai["documents"] else min(95.0, max(15.0, round(cost_pct * 1.5 + num_docs * 5.0, 1)))
         if score >= 80:
             level = "CRITICAL"
         elif score >= 60:
@@ -312,6 +326,8 @@ class MockAIAnalysisClient(AIAnalysisClient):
                 reason=f"{num_docs} project governance documents registered in tracking chain.",
             ),
         ]
+        if local_ai["documents"]:
+            risk_factors = [RiskFactor(**factor) for factor in local_ai["risk_factors"]]
 
         timeline = [
             TimelineItem(
@@ -342,7 +358,7 @@ class MockAIAnalysisClient(AIAnalysisClient):
             drift=DriftResult(
                 cost_percentage=cost_pct,
                 schedule_days=90,
-                scope_similarity=0.82,
+                scope_similarity=local_ai["scope_similarity"] if local_ai["documents"] else 0.82,
             ),
             risk=RiskResult(
                 score=score,
