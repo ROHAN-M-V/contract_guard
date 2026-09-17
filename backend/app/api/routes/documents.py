@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import List, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from app.database.session import get_db
 from app.database.models import Contract, Document
@@ -32,15 +32,11 @@ async def upload_document(
             detail="Contract not found",
         )
 
-    # Determine version number if not provided
-    if version_number is None:
-        latest_doc = (
-            db.query(Document)
-            .filter(Document.contract_id == contract.id)
-            .order_by(Document.version_number.desc())
-            .first()
-        )
-        version_number = (latest_doc.version_number + 1) if (latest_doc and latest_doc.version_number is not None) else 1
+    # Revision numbers are assigned by the backend so clients cannot create duplicates.
+    latest_version = db.query(func.max(Document.version_number)).filter(
+        Document.contract_id == contract.id
+    ).scalar()
+    version_number = (latest_version + 1) if latest_version is not None else 1
 
     content = await file.read()
     file_size = len(content)

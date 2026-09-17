@@ -39,7 +39,7 @@ htmlcov/
 *.sqlite3
 storage_uploads/
 test_contract_guard.db
-
+config.py
 # Environment & Secrets
 .env
 .env.local

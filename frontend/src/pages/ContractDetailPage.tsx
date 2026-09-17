@@ -7,6 +7,7 @@ import { reviewsService } from '@/services/reviews.service';
 import { reportsService } from '@/services/reports.service';
 import { RiskScoreCard } from '@/components/risk/RiskScoreCard';
 import { RiskFactorsList } from '@/components/risk/RiskFactorsList';
+import { AIAnalysisPanel } from '@/components/risk/AIAnalysisPanel';
 import { ContractTimeline } from '@/components/timeline/ContractTimeline';
 import { DocumentList } from '@/components/documents/DocumentList';
 import { EvidencePanel } from '@/components/evidence/EvidencePanel';
@@ -39,6 +40,7 @@ export const ContractDetailPage: React.FC = () => {
   const [selectedFactor, setSelectedFactor] = useState<string | null>(null);
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [analysisStatusMessage, setAnalysisStatusMessage] = useState<string | null>(null);
+  const [latestAnalysis, setLatestAnalysis] = useState<import('@/types/change').ContractAnalysisResult | null>(null);
 
   // Queries
   const { data: contract, isLoading: isContractLoading } = useQuery({
@@ -93,6 +95,7 @@ export const ContractDetailPage: React.FC = () => {
   const analyzeMutation = useMutation({
     mutationFn: () => contractsService.triggerAnalysis(contractNum),
     onSuccess: (res) => {
+      setLatestAnalysis(res);
       setAnalysisStatusMessage(
         `AI Compliance Analysis Complete: Evaluated risk score at ${res.risk.score}/100 (${res.risk.level}).`
       );
@@ -276,8 +279,9 @@ export const ContractDetailPage: React.FC = () => {
       {/* Tab Panels */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
+          <AIAnalysisPanel analysis={latestAnalysis} />
           <RiskFactorsList
-            factors={riskData?.factors || []}
+            factors={latestAnalysis?.risk_factors || riskData?.factors || []}
             onSelectFactor={handleSelectFactor}
           />
 

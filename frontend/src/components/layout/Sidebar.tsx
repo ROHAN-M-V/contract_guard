@@ -53,17 +53,11 @@ export const Sidebar: React.FC = () => {
           <h1 className="text-sm font-bold tracking-wider text-white uppercase flex items-center gap-1.5">
             Contract Guard
           </h1>
-          <p className="text-[10px] text-slate-400 tracking-tight uppercase">
-            Post-Award Contract Oversight
-          </p>
         </div>
       </div>
 
       {/* Synthetic Demo Banner */}
-      <div className="mx-3 my-2.5 px-2.5 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded text-[10px] text-amber-300 flex items-center justify-between">
-        <span>SYNTHETIC AUDIT DATA</span>
-        <span className="text-[9px] px-1 py-0.2 bg-amber-500/20 rounded">DEMO</span>
-      </div>
+      
 
       {/* Primary Navigation */}
       <nav className="flex-1 px-3 py-2 space-y-1 overflow-y-auto">

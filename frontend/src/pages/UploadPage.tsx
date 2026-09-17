@@ -38,7 +38,6 @@ export const UploadPage: React.FC = () => {
 
   const [selectedContract, setSelectedContract] = useState(initialContract);
   const [documentType, setDocumentType] = useState<DocumentType>('AMENDMENT');
-  const [versionNumber, setVersionNumber] = useState<number>(5);
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -98,8 +97,7 @@ export const UploadPage: React.FC = () => {
       await documentsService.uploadDocument(
         selectedContract,
         file,
-        documentType,
-        versionNumber
+        documentType
       );
 
       // Step 2-5: Progression indicators simulating engine processing pipeline
@@ -221,16 +219,9 @@ export const UploadPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="w-full sm:w-1/2">
-                <Input
-                  label="Addendum / Revision Version #"
-                  type="number"
-                  min="0"
-                  value={versionNumber}
-                  onChange={(e) => setVersionNumber(Number(e.target.value))}
-                  disabled={isProcessing}
-                />
-              </div>
+              <p className="text-[11px] text-slate-500">
+                The backend assigns the next revision number automatically for this contract.
+              </p>
             </CardContent>
           </Card>
 

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { contractsService, ContractFilterParams } from '@/services/contracts.service';
+import { documentsService } from '@/services/documents.service';
 import { Contract } from '@/types/contract';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -75,16 +76,23 @@ export const ContractsPage: React.FC = () => {
     },
   });
 
-  const handleCreateOrUpdate = async (formData: ContractFormData) => {
+  const handleCreateOrUpdate = async (formData: ContractFormData, file?: File) => {
     if (editingContract) {
-      await updateMutation.mutateAsync({
+      const updatedContract = await updateMutation.mutateAsync({
         id: editingContract.id,
         data: formData as any,
       });
+      if (file) {
+        await documentsService.uploadDocument(updatedContract.id, file, 'AMENDMENT');
+      }
       setEditingContract(null);
     } else {
-      await createMutation.mutateAsync(formData);
+      const createdContract = await createMutation.mutateAsync(formData);
+      if (file) {
+        await documentsService.uploadDocument(createdContract.id, file, 'BASELINE');
+      }
     }
+    queryClient.invalidateQueries({ queryKey: ['contracts'] });
   };
 
   const handleConfirmDelete = async () => {

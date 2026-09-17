@@ -1,6 +1,5 @@
 from typing import List, Optional
 from pydantic_settings import BaseSettings
-from pydantic import Field
 
 
 class Settings(BaseSettings):
@@ -11,7 +10,7 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "sqlite:///./contract_guard.db"
     
-    # Supabase configuration
+    # Optional Supabase storage configuration (authentication is local JWT).
     SUPABASE_URL: Optional[str] = None
     SUPABASE_ANON_KEY: Optional[str] = None
     SUPABASE_SERVICE_ROLE_KEY: Optional[str] = None
@@ -20,6 +19,7 @@ class Settings(BaseSettings):
     # AI Engine Integration
     USE_MOCK_AI: bool = True
     AI_ANALYSIS_SERVICE_URL: str = "http://localhost:8001"
+    AI_MODEL_API_KEY: Optional[str] = None
     
     # Security
     SECRET_KEY: str = "contract-guard-super-secret-key-change-in-production-2026"

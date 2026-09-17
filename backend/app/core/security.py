@@ -53,10 +53,4 @@ def decode_token(token: str) -> Optional[Dict[str, Any]]:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         return payload
     except JWTError:
-        if settings.SUPABASE_ANON_KEY or settings.SUPABASE_SERVICE_ROLE_KEY:
-            try:
-                unverified = jwt.get_unverified_claims(token)
-                return unverified
-            except Exception:
-                return None
         return None

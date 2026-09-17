@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -8,6 +8,7 @@ import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
 import { Contract } from '@/types/contract';
 import { DEPARTMENTS, CONTRACT_STATUSES } from '@/lib/constants';
+import { FileText, UploadCloud } from 'lucide-react';
 
 const contractSchema = z.object({
   contract_number: z.string().min(3, 'Contract number is required'),
@@ -27,7 +28,7 @@ export type ContractFormData = z.infer<typeof contractSchema>;
 export interface ContractModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: ContractFormData) => Promise<void>;
+  onSubmit: (data: ContractFormData, file?: File) => Promise<void>;
   contract?: Contract | null;
   isLoading?: boolean;
 }
@@ -40,6 +41,8 @@ export const ContractModal: React.FC<ContractModalProps> = ({
   isLoading = false,
 }) => {
   const isEdit = Boolean(contract);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [file, setFile] = useState<File | null>(null);
 
   const {
     register,
@@ -65,6 +68,7 @@ export const ContractModal: React.FC<ContractModalProps> = ({
   });
 
   useEffect(() => {
+    setFile(null);
     if (contract) {
       reset({
         contract_number: contract.contractNumber || contract.contract_number || '',
@@ -97,7 +101,7 @@ export const ContractModal: React.FC<ContractModalProps> = ({
   }, [contract, reset, isOpen]);
 
   const onFormSubmit = async (data: ContractFormData) => {
-    await onSubmit(data);
+    await onSubmit(data, file || undefined);
     onClose();
   };
 
@@ -189,6 +193,34 @@ export const ContractModal: React.FC<ContractModalProps> = ({
             placeholder="Provide brief contract scope context..."
             {...register('description')}
           />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+            Contract Document (Optional)
+          </label>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.doc,.docx,.png,.jpg"
+            onChange={(event) => setFile(event.target.files?.[0] || null)}
+            className="hidden"
+            disabled={isLoading}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full rounded-md border-2 border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-left hover:border-slate-500"
+            disabled={isLoading}
+          >
+            <span className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+              {file ? <FileText className="h-4 w-4" /> : <UploadCloud className="h-4 w-4" />}
+              {file ? file.name : 'Choose a contract file or addendum'}
+            </span>
+            <span className="mt-1 block text-[11px] text-slate-500">
+              The backend assigns the next document revision automatically.
+            </span>
+          </button>
         </div>
 
         <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">

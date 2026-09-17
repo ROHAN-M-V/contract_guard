@@ -14,20 +14,11 @@ async def get_current_user(
     db: Session = Depends(get_db),
 ) -> Profile:
     if not credentials:
-        # Development demo auditor profile fallback if no token provided
-        dev_user = db.query(Profile).filter(Profile.email == "auditor@contractguard.gov").first()
-        if not dev_user:
-            dev_user = Profile(
-                id="00000000-0000-0000-0000-000000000001",
-                email="auditor@contractguard.gov",
-                full_name="Rohan Vernekar (Lead Auditor)",
-                role="AUDITOR",
-                department="Public Works Oversight Division",
-            )
-            db.add(dev_user)
-            db.commit()
-            db.refresh(dev_user)
-        return dev_user
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     token = credentials.credentials
     payload = decode_token(token)
@@ -47,16 +38,11 @@ async def get_current_user(
 
     user = db.query(Profile).filter(Profile.email == email).first()
     if not user:
-        # Create profile record if authenticated via Supabase
-        user = Profile(
-            email=email,
-            full_name=payload.get("full_name") or email.split("@")[0].title(),
-            role=payload.get("role", "AUDITOR"),
-            department=payload.get("department", "Procurement Audit"),
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User account not found",
+            headers={"WWW-Authenticate": "Bearer"},
         )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
 
     return user
 

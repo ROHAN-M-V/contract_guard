@@ -7,6 +7,13 @@ interface LoginResponse {
   user: UserProfile;
 }
 
+export interface RegisterData {
+  email: string;
+  password: string;
+  full_name: string;
+  department?: string;
+}
+
 export const authService = {
   async login(email: string, password: string): Promise<LoginResponse> {
     const data = await apiClient<LoginResponse>('/auth/login', {
@@ -18,6 +25,18 @@ export const authService = {
       localStorage.setItem('contract_guard_user', JSON.stringify(data.user));
     }
     return data;
+  },
+
+  async register(data: RegisterData): Promise<LoginResponse> {
+    const response = await apiClient<LoginResponse>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    if (response.access_token) {
+      setAuthToken(response.access_token);
+      localStorage.setItem('contract_guard_user', JSON.stringify(response.user));
+    }
+    return response;
   },
 
   async getCurrentUser(): Promise<UserProfile> {

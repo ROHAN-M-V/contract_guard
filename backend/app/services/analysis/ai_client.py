@@ -389,11 +389,12 @@ class HttpAIAnalysisClient(AIAnalysisClient):
             "documents": documents,
             "metadata": contract_metadata or {},
         }
+        headers = {"Authorization": f"Bearer {settings.AI_MODEL_API_KEY}"} if settings.AI_MODEL_API_KEY else {}
         logger.info(f"[HttpAIAnalysisClient] Calling external AI service at {endpoint} for contract {contract_id}")
 
         async with httpx.AsyncClient(timeout=120.0) as client:
             try:
-                response = await client.post(endpoint, json=payload)
+                response = await client.post(endpoint, json=payload, headers=headers)
                 response.raise_for_status()
                 data = response.json()
                 return ContractAnalysisResult(**data)

@@ -15,6 +15,13 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class RegisterRequest(BaseModel):
+    email: str
+    password: str
+    full_name: str
+    department: Optional[str] = None
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -29,11 +36,52 @@ class UserProfileResponse(BaseModel):
     department: Optional[str] = None
 
 
+def _user_response(user: Profile) -> dict:
+    return {
+        "id": user.id,
+        "email": user.email,
+        "full_name": user.full_name,
+        "role": user.role,
+        "department": user.department,
+    }
+
+
+@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+async def register(data: RegisterRequest, db: Session = Depends(get_db)):
+    email = data.email.strip().lower()
+    if len(data.password) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Password must be at least 6 characters",
+        )
+
+    existing_user = db.query(Profile).filter(Profile.email == email).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this email already exists",
+        )
+
+    user = Profile(
+        email=email,
+        full_name=data.full_name.strip(),
+        role="AUDITOR",
+        department=data.department.strip() if data.department else None,
+        hashed_password=get_password_hash(data.password),
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    token = create_access_token(subject=user.email, role=user.role, department=user.department)
+    return {"access_token": token, "token_type": "bearer", "user": _user_response(user)}
+
+
 @router.post("/login", response_model=TokenResponse)
 async def login(data: LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(Profile).filter(Profile.email == data.email).first()
+    user = db.query(Profile).filter(Profile.email == data.email.strip().lower()).first()
     
-    # Check demo users or initialize if not present
+    # Keep the seeded demo accounts usable in local development.
     if not user:
         if data.email in ["auditor@contractguard.gov", "admin@contractguard.gov", "officer@pwd.gov"]:
             role = "ADMIN" if "admin" in data.email else "AUDITOR"
@@ -55,6 +103,12 @@ async def login(data: LoginRequest, db: Session = Depends(get_db)):
                 detail="Invalid credentials. Please use an authorized government audit email.",
             )
 
+    if not user.hashed_password or not verify_password(data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password",
+        )
+
     token = create_access_token(
         subject=user.email,
         role=user.role,
@@ -64,13 +118,7 @@ async def login(data: LoginRequest, db: Session = Depends(get_db)):
     return {
         "access_token": token,
         "token_type": "bearer",
-        "user": {
-            "id": user.id,
-            "email": user.email,
-            "full_name": user.full_name,
-            "role": user.role,
-            "department": user.department,
-        },
+        "user": _user_response(user),
     }
 
 

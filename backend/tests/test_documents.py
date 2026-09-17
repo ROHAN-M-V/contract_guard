@@ -11,7 +11,7 @@ def test_list_and_upload_documents(client):
     # Upload test document
     dummy_pdf_content = b"%PDF-1.4 synthetic test content for contract amendment"
     files = {"file": ("test_amendment_5.pdf", io.BytesIO(dummy_pdf_content), "application/pdf")}
-    data = {"document_type": "AMENDMENT", "version_number": 5}
+    data = {"document_type": "AMENDMENT"}
 
     upload_res = client.post(
         "/api/v1/contracts/PWD-2026-014/documents",
@@ -22,6 +22,7 @@ def test_list_and_upload_documents(client):
     uploaded_doc = upload_res.json()
     assert uploaded_doc["filename"] == "test_amendment_5.pdf"
     assert uploaded_doc["document_type"] == "AMENDMENT"
+    assert uploaded_doc["version_number"] == 5
     assert uploaded_doc["processing_status"] == "COMPLETED"
 
     # Test download-url
