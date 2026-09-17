@@ -1,3 +1,4 @@
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -13,7 +14,8 @@ from app.database.models import (
 from app.database.models.user import Profile
 from app.schemas.analysis import ContractAnalysisResult
 from app.services.analysis.ai_client import get_ai_client
-from app.api.dependencies import get_current_user
+from app.services.storage.storage_service import storage_service
+from app.api.dependencies import get_current_user, get_accessible_contract
 
 router = APIRouter(prefix="/contracts/{contract_id}/analyze", tags=["Analysis"])
 
@@ -24,14 +26,7 @@ async def analyze_contract_endpoint(
     db: Session = Depends(get_db),
     current_user: Profile = Depends(get_current_user),
 ):
-    contract = db.query(Contract).filter(
-        or_(Contract.id == contract_id, Contract.contract_number == contract_id)
-    ).first()
-    if not contract:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Contract not found",
-        )
+    contract = get_accessible_contract(contract_id, db, current_user)
 
     # Gather registered documents for this contract
     docs = db.query(Document).filter(Document.contract_id == contract.id).all()
@@ -46,6 +41,11 @@ async def analyze_contract_endpoint(
         }
         for d in docs
     ]
+    for document in doc_payloads:
+        try:
+            await storage_service.ensure_local_file(document["storage_path"])
+        except (OSError, ValueError, httpx.HTTPError) as exc:
+            raise HTTPException(status_code=422, detail=f"Document content is unavailable: {exc}") from exc
 
     contract_metadata = {
         "id": contract.id,

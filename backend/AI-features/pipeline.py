@@ -37,6 +37,7 @@ def analyze_documents(documents: List[Dict[str, Any]], storage_root: Path) -> Di
         "scope_similarity": similarity,
         "risk_score": score,
         "risk_level": level,
+        "cost_percentage": cost_pct,
         "risk_factors": list(factor_dicts(factors)),
     }
 

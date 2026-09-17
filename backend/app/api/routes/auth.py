@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.core.security import create_access_token, verify_password, get_password_hash
+from app.core.config import settings
 from app.database.session import get_db
 from app.database.models.user import Profile
 from app.api.dependencies import get_current_user
@@ -48,6 +49,11 @@ def _user_response(user: Profile) -> dict:
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def register(data: RegisterRequest, db: Session = Depends(get_db)):
+    if not settings.ALLOW_PUBLIC_REGISTRATION:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Registration is disabled. Request an approved account.",
+        )
     email = data.email.strip().lower()
     if len(data.password) < 6:
         raise HTTPException(
@@ -79,16 +85,17 @@ async def register(data: RegisterRequest, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse)
 async def login(data: LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(Profile).filter(Profile.email == data.email.strip().lower()).first()
+    email = data.email.strip().lower()
+    user = db.query(Profile).filter(Profile.email == email).first()
     
     # Keep the seeded demo accounts usable in local development.
     if not user:
-        if data.email in ["auditor@contractguard.gov", "admin@contractguard.gov", "officer@pwd.gov"]:
-            role = "ADMIN" if "admin" in data.email else "AUDITOR"
+        if email in ["auditor@contractguard.gov", "admin@contractguard.gov", "officer@pwd.gov"]:
+            role = "ADMIN" if "admin" in email else "AUDITOR"
             dept = "Audit & Oversight Directorate" if role == "ADMIN" else "Public Works Oversight Division"
             name = "System Admin" if role == "ADMIN" else "Senior Procurement Auditor"
             user = Profile(
-                email=data.email,
+                email=email,
                 full_name=name,
                 role=role,
                 department=dept,

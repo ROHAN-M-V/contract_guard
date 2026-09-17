@@ -256,10 +256,11 @@ class MockAIAnalysisClient(AIAnalysisClient):
         base_val = float(meta.get("baseline_value") or 50000000.0)
         curr_val = float(meta.get("current_value") or (base_val * 1.15))
         cost_diff = curr_val - base_val
-        cost_pct = round((cost_diff / base_val) * 100, 1) if base_val > 0 else 0.0
+        metadata_cost_pct = round((cost_diff / base_val) * 100, 1) if base_val > 0 else 0.0
+        cost_pct = local_ai.get("cost_percentage", metadata_cost_pct) if local_ai["documents"] else metadata_cost_pct
 
         num_docs = len(documents)
-        curr_version = max(num_docs, 1)
+        curr_version = max((doc.get("version_number") or 0 for doc in documents), default=0)
 
         # Risk score calculation heuristic for mock
         score = local_ai["risk_score"] if local_ai["documents"] else min(95.0, max(15.0, round(cost_pct * 1.5 + num_docs * 5.0, 1)))
@@ -272,18 +273,31 @@ class MockAIAnalysisClient(AIAnalysisClient):
         else:
             level = "LOW"
 
-        evidence_list = [
-            EvidenceItem(
-                document_id=documents[0].get("id") if documents else "doc-base",
-                filename=documents[0].get("filename") if documents else "contract_spec.pdf",
+        evidence_list = []
+        for document in local_ai["documents"]:
+            page = next((page for page in document.get("pages", []) if page.get("text")), None)
+            if page:
+                evidence_list.append(EvidenceItem(
+                    document_id=document.get("id"),
+                    filename=document.get("filename"),
+                    page=page["page"],
+                    source_text=page["text"][:1000],
+                    original_value=None,
+                    new_value=None,
+                    field="document_text",
+                    change_type="EXTRACTED",
+                ))
+        if not evidence_list and documents:
+            evidence_list.append(EvidenceItem(
+                document_id=documents[0].get("id"),
+                filename=documents[0].get("filename"),
                 page=1,
-                source_text=f"Initial agreed consideration: ₹{base_val:,.2f}",
-                original_value=base_val,
+                source_text="No extractable text was found in the registered document.",
+                original_value=None,
                 new_value=None,
-                field="contract_value",
-                change_type="BASELINE",
-            )
-        ]
+                field="document_text",
+                change_type="UNAVAILABLE",
+            ))
 
         if curr_val != base_val and documents:
             latest_doc = documents[-1]
@@ -291,8 +305,8 @@ class MockAIAnalysisClient(AIAnalysisClient):
                 EvidenceItem(
                     document_id=latest_doc.get("id"),
                     filename=latest_doc.get("filename"),
-                    page=2,
-                    source_text=f"Revised payable sum adjusted to: ₹{curr_val:,.2f} (+{cost_pct}%)",
+                    page=evidence_list[-1].page if evidence_list else 1,
+                    source_text=evidence_list[-1].source_text if evidence_list else f"Revised payable sum adjusted to: ₹{curr_val:,.2f} (+{cost_pct}%)",
                     original_value=base_val,
                     new_value=curr_val,
                     field="contract_value",
@@ -357,8 +371,8 @@ class MockAIAnalysisClient(AIAnalysisClient):
             current_version=curr_version,
             drift=DriftResult(
                 cost_percentage=cost_pct,
-                schedule_days=90,
-                scope_similarity=local_ai["scope_similarity"] if local_ai["documents"] else 0.82,
+                schedule_days=0 if curr_version == 0 else 90,
+                scope_similarity=local_ai["scope_similarity"] if local_ai["documents"] and num_docs > 1 else 1.0 if curr_version == 0 else 0.82,
             ),
             risk=RiskResult(
                 score=score,

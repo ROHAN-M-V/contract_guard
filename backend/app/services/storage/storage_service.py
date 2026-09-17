@@ -73,6 +73,24 @@ class StorageService:
         # Local development signed URL fallback
         return f"/api/v1/documents/download-file?path={storage_path}"
 
+    async def ensure_local_file(self, storage_path: str) -> Path:
+        local_path = (STORAGE_LOCAL_DIR / storage_path).resolve()
+        if STORAGE_LOCAL_DIR.resolve() not in local_path.parents:
+            raise ValueError("Invalid storage path")
+        if local_path.exists():
+            return local_path
+        if not (self.supabase_url and self.service_role_key and "your-project" not in self.supabase_url):
+            return local_path
+
+        download_url = f"{self.supabase_url}/storage/v1/object/{self.bucket}/{storage_path}"
+        headers = {"Authorization": f"Bearer {self.service_role_key}"}
+        async with httpx.AsyncClient() as client:
+            response = await client.get(download_url, headers=headers)
+            response.raise_for_status()
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        local_path.write_bytes(response.content)
+        return local_path
+
     async def delete_file(self, storage_path: str) -> bool:
         if self.supabase_url and self.service_role_key and "your-project" not in self.supabase_url:
             delete_url = f"{self.supabase_url}/storage/v1/object/{self.bucket}/{storage_path}"

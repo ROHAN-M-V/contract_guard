@@ -12,7 +12,7 @@ from app.schemas.contract import (
     ContractSummaryResponse,
 )
 from app.schemas.common import PaginatedResponse
-from app.api.dependencies import get_current_user
+from app.api.dependencies import get_current_user, get_accessible_contract
 
 router = APIRouter(prefix="/contracts", tags=["Contracts"])
 
@@ -65,6 +65,12 @@ async def list_contracts(
     current_user: Profile = Depends(get_current_user),
 ):
     query = db.query(Contract)
+    if current_user.role != "ADMIN":
+        query = query.filter(
+            (Contract.created_by == current_user.id)
+            | Contract.department.ilike(f"%{(current_user.department or '').strip()}%")
+            | Contract.department.ilike(f"{(current_user.department or '').strip()}%")
+        )
 
     if search:
         search_pattern = f"%{search}%"
@@ -112,14 +118,7 @@ async def get_contract(
     db: Session = Depends(get_db),
     current_user: Profile = Depends(get_current_user),
 ):
-    contract = db.query(Contract).filter(
-        or_(Contract.id == contract_id, Contract.contract_number == contract_id)
-    ).first()
-    if not contract:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Contract not found",
-        )
+    contract = get_accessible_contract(contract_id, db, current_user)
     return contract
 
 
@@ -130,14 +129,7 @@ async def update_contract(
     db: Session = Depends(get_db),
     current_user: Profile = Depends(get_current_user),
 ):
-    contract = db.query(Contract).filter(
-        or_(Contract.id == contract_id, Contract.contract_number == contract_id)
-    ).first()
-    if not contract:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Contract not found",
-        )
+    contract = get_accessible_contract(contract_id, db, current_user)
 
     update_dict = data.model_dump(exclude_unset=True)
     for key, value in update_dict.items():
@@ -154,14 +146,7 @@ async def delete_contract(
     db: Session = Depends(get_db),
     current_user: Profile = Depends(get_current_user),
 ):
-    contract = db.query(Contract).filter(
-        or_(Contract.id == contract_id, Contract.contract_number == contract_id)
-    ).first()
-    if not contract:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Contract not found",
-        )
+    contract = get_accessible_contract(contract_id, db, current_user)
 
     # Check if contract has documents - if so, soft-delete / close as specified in guidelines
     doc_count = db.query(Document).filter(Document.contract_id == contract.id).count()
@@ -181,14 +166,7 @@ async def get_contract_summary(
     db: Session = Depends(get_db),
     current_user: Profile = Depends(get_current_user),
 ):
-    contract = db.query(Contract).filter(
-        or_(Contract.id == contract_id, Contract.contract_number == contract_id)
-    ).first()
-    if not contract:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Contract not found",
-        )
+    contract = get_accessible_contract(contract_id, db, current_user)
 
     # Calculate drift metrics
     cost_drift = None

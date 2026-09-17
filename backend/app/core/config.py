@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     USE_MOCK_AI: bool = True
     AI_ANALYSIS_SERVICE_URL: str = "http://localhost:8001"
     AI_MODEL_API_KEY: Optional[str] = None
+    ALLOW_PUBLIC_REGISTRATION: bool = False
     
     # Security
     SECRET_KEY: str = "contract-guard-super-secret-key-change-in-production-2026"

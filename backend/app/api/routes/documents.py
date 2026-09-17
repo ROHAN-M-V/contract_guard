@@ -3,13 +3,14 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy import func, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.database.session import get_db
 from app.database.models import Contract, Document
 from app.database.models.user import Profile
 from app.schemas.document import DocumentResponse, DocumentDownloadUrlResponse
 from app.services.storage.storage_service import storage_service, STORAGE_LOCAL_DIR
-from app.api.dependencies import get_current_user
+from app.api.dependencies import get_current_user, get_accessible_contract
 
 router = APIRouter(tags=["Documents"])
 
@@ -23,20 +24,15 @@ async def upload_document(
     db: Session = Depends(get_db),
     current_user: Profile = Depends(get_current_user),
 ):
-    contract = db.query(Contract).filter(
-        or_(Contract.id == contract_id, Contract.contract_number == contract_id)
-    ).first()
-    if not contract:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Contract not found",
-        )
+    contract = get_accessible_contract(contract_id, db, current_user)
+    if version_number is not None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Version number is assigned by the server")
 
     # Revision numbers are assigned by the backend so clients cannot create duplicates.
     latest_version = db.query(func.max(Document.version_number)).filter(
         Document.contract_id == contract.id
     ).scalar()
-    version_number = (latest_version + 1) if latest_version is not None else 1
+    version_number = (latest_version + 1) if latest_version is not None else 0
 
     content = await file.read()
     file_size = len(content)
@@ -53,7 +49,11 @@ async def upload_document(
         uploaded_by=current_user.id,
     )
     db.add(doc)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A document revision was created concurrently; retry upload")
     db.refresh(doc)
 
     # Upload file to storage
@@ -78,14 +78,7 @@ async def list_contract_documents(
     db: Session = Depends(get_db),
     current_user: Profile = Depends(get_current_user),
 ):
-    contract = db.query(Contract).filter(
-        or_(Contract.id == contract_id, Contract.contract_number == contract_id)
-    ).first()
-    if not contract:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Contract not found",
-        )
+    contract = get_accessible_contract(contract_id, db, current_user)
 
     docs = (
         db.query(Document)
@@ -108,6 +101,7 @@ async def get_document(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Document not found",
         )
+    get_accessible_contract(doc.contract_id, db, current_user)
     return doc
 
 
@@ -123,6 +117,7 @@ async def delete_document(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Document not found",
         )
+    get_accessible_contract(doc.contract_id, db, current_user)
 
     if doc.storage_path:
         await storage_service.delete_file(doc.storage_path)
@@ -144,6 +139,7 @@ async def get_document_download_url(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Document not found",
         )
+    get_accessible_contract(doc.contract_id, db, current_user)
 
     signed_url = await storage_service.create_signed_url(doc.storage_path)
     return DocumentDownloadUrlResponse(
@@ -157,8 +153,16 @@ async def get_document_download_url(
 @router.get("/documents/download-file")
 async def download_file_stream(
     path: str,
+    current_user: Profile = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
+    document = db.query(Document).filter(Document.storage_path == path).first()
+    if not document:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    get_accessible_contract(document.contract_id, db, current_user)
     file_path = (STORAGE_LOCAL_DIR / path).resolve()
+    if STORAGE_LOCAL_DIR.resolve() not in file_path.parents:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid document path")
     if not file_path.exists():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

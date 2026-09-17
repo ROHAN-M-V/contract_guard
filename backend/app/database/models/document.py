@@ -1,11 +1,12 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, Integer, BigInteger, DateTime, ForeignKey
+from sqlalchemy import Column, String, Integer, BigInteger, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.database.base import Base
 
 class Document(Base):
     __tablename__ = "documents"
+    __table_args__ = (UniqueConstraint("contract_id", "version_number", name="uq_document_contract_version"),)
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     contract_id = Column(String(36), ForeignKey("contracts.id", ondelete="CASCADE"), nullable=False, index=True)
