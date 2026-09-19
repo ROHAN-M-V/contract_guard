@@ -80,7 +80,9 @@ class StorageService:
         if local_path.exists():
             return local_path
         if not (self.supabase_url and self.service_role_key and "your-project" not in self.supabase_url):
-            return local_path
+            raise FileNotFoundError(
+                f"Storage file not found locally and Supabase is not configured: {storage_path}"
+            )
 
         download_url = f"{self.supabase_url}/storage/v1/object/{self.bucket}/{storage_path}"
         headers = {"Authorization": f"Bearer {self.service_role_key}"}

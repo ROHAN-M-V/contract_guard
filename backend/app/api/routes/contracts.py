@@ -66,11 +66,11 @@ async def list_contracts(
 ):
     query = db.query(Contract)
     if current_user.role != "ADMIN":
-        query = query.filter(
-            (Contract.created_by == current_user.id)
-            | Contract.department.ilike(f"%{(current_user.department or '').strip()}%")
-            | Contract.department.ilike(f"{(current_user.department or '').strip()}%")
-        )
+        filters = Contract.created_by == current_user.id
+        user_department = (current_user.department or "").strip()
+        if user_department:
+            filters = filters | Contract.department.ilike(f"%{user_department}%")
+        query = query.filter(filters)
 
     if search:
         search_pattern = f"%{search}%"
@@ -92,6 +92,8 @@ async def list_contracts(
     if department:
         query = query.filter(Contract.department.ilike(f"%{department}%"))
 
+    total = query.order_by(None).count()
+
     # Sorting
     sort_col = getattr(Contract, sort_by, Contract.risk_score)
     if sort_order.lower() == "desc":
@@ -99,7 +101,6 @@ async def list_contracts(
     else:
         query = query.order_by(asc(sort_col).nullsfirst())
 
-    total = query.count()
     items = query.offset((page - 1) * page_size).limit(page_size).all()
     total_pages = (total + page_size - 1) // page_size if total > 0 else 1
 

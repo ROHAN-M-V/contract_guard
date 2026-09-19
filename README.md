@@ -16,15 +16,18 @@ The platform automatically computes and presents cumulative cost drift, schedule
 - **Platform Layer (Contract Guard - This System)**:
   - Frontend UI, visual analytics, data tables, and evidence viewers
   - RESTful Backend API (FastAPI) & Database persistence (SQLAlchemy, Alembic, PostgreSQL)
-  - Supabase Auth & role-based access control (Auditor / Admin)
-  - Document vault & signed URL download pipelines (Supabase Storage)
+   - Local JWT authentication & role-based access control (Auditor / Admin)
+   - Document vault with authenticated signed URL/download pipelines (Supabase Storage or local disk)
   - Reviewer determination workflows & certified PDF audit report generation (ReportLab)
   - Clean external adapter interface for Core AI microservice integration
-- **Core AI Layer (External Service)**:
-  - LLM prompt engineering & document text extraction
-  - Sentence-transformers semantic embeddings
-  - Semantic scope similarity & drift algorithms
-  - Risk score calculation & factor weighting
+- **Core AI Layer (Local or External Service)**:
+   - PDF text extraction with OCR fallback for scanned documents
+   - DOCX parsing and image OCR for supported uploads
+   - Percentage and cost-drift extraction from document text
+   - Sentence-transformer semantic embeddings and scope similarity
+   - Weighted risk score and risk-factor calculation
+   - Extracted page-level evidence citations
+   - Optional external AI microservice through a stable HTTP adapter
 
 ### Advisory Terminology Policy
 Contract Guard is designed strictly as a **decision-support tool** to empower official procurement auditors. It surfaces objective variances and signals without issuing automated criminal accusations:
@@ -38,8 +41,10 @@ Contract Guard is designed strictly as a **decision-support tool** to empower of
 - **Frontend**: React 18, Vite, TypeScript, Tailwind CSS, React Router v6, TanStack Query v5, React Hook Form, Zod, Lucide React, Recharts
 - **Backend**: Python 3.12+, FastAPI, Pydantic v2, SQLAlchemy 2.0, Alembic, ReportLab (PDF generation)
 - **Database**: PostgreSQL / SQLite (for zero-dependency offline local test execution)
-- **Authentication**: Supabase Auth (JWT tokens verified via FastAPI HTTPBearer)
-- **Storage**: Supabase Storage (`contract-documents` bucket) with local filesystem fallback
+- **Authentication**: Local password authentication with signed JWT access tokens and `AUDITOR`/`ADMIN` roles
+- **Storage**: Supabase Storage (`contract-documents` bucket) with authenticated local filesystem fallback
+- **Document processing**: `pypdf`, `pdf2image`, Poppler, Tesseract, `python-docx`, Pillow, and `pytesseract`
+- **AI analysis**: Local extraction, embedding, and risk pipeline with optional external HTTP service
 - **Testing**: Vitest & React Testing Library (Frontend), Pytest & HTTPX (Backend)
 - **Containers**: Docker & Docker Compose
 
@@ -64,13 +69,14 @@ contract-guard/
 │   │   ├── pages/                # LoginPage, Dashboard, Contracts, Detail, Upload, Alerts, Reports, Settings
 │   │   ├── services/             # auth, contracts, documents, reviews, alerts, reports
 │   │   ├── types/                # contract, document, change, risk, evidence, review
-│   │   ├── lib/                  # api.ts (client), supabase.ts, utils.ts, constants.ts
+│   │   ├── lib/                  # api.ts (client), utils.ts, constants.ts
 │   │   ├── test/                 # Vitest test suite
 │   │   ├── router/index.tsx
 │   │   ├── App.tsx & main.tsx
 │   ├── package.json, vite.config.ts, tsconfig.json, tailwind.config.js
 │   └── .env.example
 ├── backend/
+│   ├── AI-features/             # Extraction, OCR, embeddings, prompts, risk, local pipeline
 │   ├── app/
 │   │   ├── api/
 │   │   │   ├── dependencies.py   # Auth & auditor role verification
@@ -87,6 +93,7 @@ contract-guard/
 │   ├── alembic/                  # Database migration versions
 │   ├── tests/                    # Pytest test suite
 │   ├── requirements.txt
+│   ├── Dockerfile                # Includes Poppler and Tesseract for OCR
 │   └── .env.example
 ├── supabase/
 │   ├── migrations/               # PostgreSQL schema & Row-Level Security
@@ -129,6 +136,10 @@ SUPABASE_STORAGE_BUCKET=contract-documents
 # AI Service Integration
 USE_MOCK_AI=true
 AI_ANALYSIS_SERVICE_URL=http://localhost:8001
+AI_MODEL_API_KEY=                 # Optional bearer credential for an external AI service
+
+# Registration is disabled by default; enable only for a controlled deployment
+ALLOW_PUBLIC_REGISTRATION=false
 
 # Security
 SECRET_KEY=contract-guard-super-secret-key-change-in-production-2026
@@ -138,8 +149,7 @@ SECRET_KEY=contract-guard-super-secret-key-change-in-production-2026
 Copy `frontend/.env.example` to `frontend/.env`:
 ```bash
 VITE_API_URL=http://localhost:8000/api/v1
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
+VITE_DEMO_MODE=true               # Shows a warning when synthetic/mock data is enabled
 ```
 
 ---
@@ -177,6 +187,16 @@ npm install
 npm run dev
 ```
 Open `http://localhost:5173` in your browser.
+
+### Docker Compose
+
+To run the database, backend, and frontend together:
+
+```bash
+docker compose up --build
+```
+
+The frontend is available at `http://localhost:3000` and the backend API at `http://localhost:8000` when using the compose configuration.
 
 ---
 
@@ -228,6 +248,21 @@ To test the complete end-to-end audit lifecycle:
    - Click **Generate PDF Report**.
    - The system calls the backend ReportLab engine and downloads `Contract_Guard_Report_PWD-2026-014.pdf`, containing all contract identifiers, risk factors, timeline progression, changes, evidence quotes, and reviewer determination.
 
+### Frontend Functionality
+
+- **Dashboard**: Shows contract totals, risk distribution, review priorities, alerts, and recent activity.
+- **Contracts**: Search, filter, sort, create, edit, archive, and open contracts within the user's authorized department or ownership scope.
+- **Contract details**: Displays baseline/current values, schedule drift, risk score, risk factors, document history, version timeline, evidence, alerts, and review decisions.
+- **Document upload**: Associates a document with a contract, assigns the next server-owned revision, and triggers analysis.
+- **Analysis**: Shows cost deviation, scope similarity, document cadence, risk level, extracted evidence, and persisted changes.
+- **Alerts**: Lists high and critical risk signals and supports unread-alert workflows.
+- **Reports**: Generates downloadable PDF audit dossiers.
+- **Settings and account**: Provides authenticated profile and application settings views.
+
+### Supported Upload Formats
+
+The backend supports PDF text extraction with OCR fallback, DOCX paragraph extraction, and PNG/JPG/JPEG image OCR. Legacy `.doc` files are not parsed and should be converted to DOCX or PDF before upload. Docker installs Poppler and Tesseract for OCR; local development should install those system packages separately when OCR is required.
+
 ---
 
 ## 9. Testing & Quality Checks
@@ -275,9 +310,27 @@ npm run lint   # tsc --noEmit
 npm run build  # Production Vite build
 ```
 
+The backend test suite covers authentication, contract access, uploads, revisions, analysis adapters, reviews, and versions. The frontend suite covers dashboard rendering, contract risk summaries, AI risk factors, and evidence selection.
+
 ---
 
-## 10. Core AI Microservice Integration
+## 10. AI Features & Microservice Integration
+
+### Local AI pipeline
+
+When `USE_MOCK_AI=true`, analysis still uses the local document pipeline for uploaded contracts. It:
+
+1. Resolves local or Supabase-backed document content.
+2. Extracts text from PDF, DOCX, and supported image files.
+3. Uses OCR for scanned PDFs and images when the required system tools are available.
+4. Detects percentage-based cost variance from amendment text.
+5. Embeds baseline and amendment text and calculates cosine scope similarity.
+6. Calculates weighted cost, scope, and document-cadence risk factors.
+7. Returns extracted page-level evidence and persists risk, change, timeline, and alert records.
+
+The local pipeline is deterministic and intended for development, demonstrations, and offline execution. It is not a substitute for production model validation or auditor judgment.
+
+### External AI microservice
 
 When connecting the Core AI Engineer's external microservice:
 1. Update `backend/.env`:
@@ -295,10 +348,20 @@ When connecting the Core AI Engineer's external microservice:
    ```
 3. The AI service responds with the **Shared AI Result Contract** (Drift, Risk, Factors, Changes, Timeline, Evidence), which the backend automatically ingests into the relational database.
 
+The optional `AI_MODEL_API_KEY` is sent as a bearer credential to the configured external service. Keep this value on the backend and never expose it through frontend environment variables.
+
 ---
 
-## 11. Known Limitations & Notes
+## 11. Security, Data Integrity & Limitations
+
+- Every protected API route requires a valid JWT.
+- Admin users can access all contracts; other users are limited to contracts they created or contracts in their department.
+- Registration is disabled by default. Set `ALLOW_PUBLIC_REGISTRATION=true` only for a controlled deployment with an appropriate onboarding policy.
+- Document downloads require authentication and are restricted to paths inside the configured storage directory.
+- Document revisions are assigned by the backend. Baseline documents use revision `0`, and the database enforces unique `(contract_id, version_number)` pairs.
+- Apply `alembic upgrade head` when deploying the revision-integrity migration.
 
 - **Synthetic Demo Data**: All demo contracts and vendor names are synthetic simulations created for procurement auditing demonstration.
-- **PDF Extraction**: In mock mode, ground-truth evidence citations are generated deterministically based on uploaded revision numbers.
-- **Local Fallback**: If external Supabase Storage or PostgreSQL credentials are not supplied, the platform seamlessly uses SQLite and local disk storage without crashing.
+- **Mock Analysis**: The flagship seeded contract has deterministic demo analysis; newly uploaded contracts use the local extraction pipeline when mock mode is enabled.
+- **OCR Dependencies**: OCR requires Poppler and Tesseract. If unavailable, extraction returns a controlled empty result rather than treating binary files as text.
+- **Local Fallback**: If external Supabase Storage or PostgreSQL credentials are not supplied, the platform uses SQLite and local disk storage for development.
